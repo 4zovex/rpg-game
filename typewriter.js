@@ -3,8 +3,8 @@
 // Every line the game prints is queued here. During a battle, lines that tell you what happened
 // ("The Wolf uses POUNCE!", "You hit the Wolf for 12 damage!") type out quickly and then pause
 // for a moment. Reaction lines like "The Wolf dodges your attack!" type slower and pause longer,
-// so you have time to take them in. Menus, status bars and everything outside battle appear
-// instantly.
+// so you have time to take them in. Menus, status bars and other extra info in battle type out
+// quickly with a tiny pause; everything outside battle appears instantly.
 //
 // The ENEMY INTENT block (what the enemy is about to do) is paced like dialogue: its text types
 // out noticeably slower than the rest of the battle text, with a small pause after every line and
@@ -21,10 +21,13 @@ const Typewriter = (() => {
     instant: { msPerChar: 0, pause: 0 },
     event: { msPerChar: 12, pause: 220 }, // something happened
     reaction: { msPerChar: 28, pause: 550 }, // dodges, misses, parries, stuns: let it sink in
-    // Enemy intent: spoken, dialogue-style. The story lines are the slowest; the numbers
-    // (damage, accuracy, can-parry...) are a bit quicker so a turn doesn't drag on too long.
+    // Enemy intent: spoken, dialogue-style. Story lines and the numbers under them
+    // (damage, accuracy, can-parry...) all go at about the same slow speed.
     intent: { msPerChar: 36, pause: 600 },
-    intentStat: { msPerChar: 20, pause: 300 },
+    intentStat: { msPerChar: 34, pause: 550 }, // Damage / Type / Accuracy lines: about the same speed
+    // Extra info during battle (HP/energy bars, last move, stance notes, the action menu...):
+    // not instant, but much quicker than the intent text, with a tiny pause between lines.
+    extra: { msPerChar: 6, pause: 50 },
   };
 
   // Lines inside the intent block that are plain numbers/checks rather than story text.
@@ -93,7 +96,7 @@ const Typewriter = (() => {
     if (INTENT_START.test(line)) inIntent = true;
     if (inIntent) return INTENT_STAT.test(line) ? "intentStat" : "intent";
     const rule = PACING_RULES.find((r) => r.match.test(line));
-    return rule ? rule.tier : "instant";
+    return rule ? rule.tier : "extra";
   }
 
   // ---------- Queue ----------
