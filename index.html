@@ -1,36 +1,394 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>THE LAST SAVE</title>
-<link rel="icon" href="icon-image.png">
-<style>
-:root{color-scheme:dark}*{box-sizing:border-box}html,body{margin:0;height:100%;background:#050505}body{font-family:Consolas,"Courier New",monospace;color:#e8e8e8;display:flex;align-items:center;justify-content:center;padding:14px}.terminal{width:min(1100px,100%);height:min(820px,96vh);display:flex;flex-direction:column;background:#0b0b0b;border:1px solid #333;border-radius:8px;box-shadow:0 18px 50px #000;overflow:hidden}.bar{height:38px;flex:0 0 38px;background:#191919;border-bottom:1px solid #333;display:flex;align-items:center;gap:8px;padding:0 12px;color:#aaa;font-size:13px}.dot{width:11px;height:11px;border-radius:50%;background:#555}.title{margin-left:8px}#screen{flex:1;overflow:auto;padding:14px 16px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.35;font-size:15px;cursor:text}.input-row{display:flex;align-items:center;border-top:1px solid #292929;padding:9px 14px;gap:8px}.prompt{color:#fff;user-select:none}#command{flex:1;min-width:0;border:0;outline:0;background:transparent;color:#fff;font:inherit;font-size:15px}button{font:inherit;background:#191919;color:#ddd;border:1px solid #3a3a3a;border-radius:4px;padding:6px 9px;cursor:pointer}button:hover{background:#252525}.status{padding:5px 14px;border-top:1px solid #222;color:#888;font-size:12px}.help{padding:0 14px 7px;color:#666;font-size:11px}@media(max-width:700px){.terminal{height:98vh}#screen{font-size:13px}.bar button{display:none}}
-</style>
-</head>
-<body>
-<div class="terminal">
-  <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="title">THE LAST SAVE — offline edition</span><span style="margin-left:auto"><button id="newGame">New Game</button></span></div>
-  <div id="screen" tabindex="0"></div>
-  <div class="status" id="status">Ready</div>
-  <div class="help">Enter = run command · ↑/↓ = history · saves are automatic in this browser · works fully offline</div>
-  <div class="input-row"><span class="prompt">&gt;&gt;&gt;</span><input id="command" autocomplete="off" spellcheck="false" autofocus></div>
-</div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>THE LAST SAVE</title>
+    <link rel="icon" href="icon-image.png" />
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #050505;
+      }
+      body {
+        font-family: Consolas, "Courier New", monospace;
+        color: #e8e8e8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 14px;
+      }
+      .terminal {
+        width: min(1100px, 100%);
+        height: min(820px, 96vh);
+        display: flex;
+        flex-direction: column;
+        background: #0b0b0b;
+        border: 1px solid #333;
+        border-radius: 8px;
+        box-shadow: 0 18px 50px #000;
+        overflow: hidden;
+      }
+      .bar {
+        height: 38px;
+        flex: 0 0 38px;
+        background: #191919;
+        border-bottom: 1px solid #333;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px;
+        color: #aaa;
+        font-size: 13px;
+      }
+      .dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: #555;
+      }
+      .title {
+        margin-left: 8px;
+      }
+      #screen {
+        flex: 1;
+        overflow: auto;
+        padding: 14px 16px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        line-height: 1.35;
+        font-size: 15px;
+        cursor: text;
+      }
+      .input-row {
+        display: flex;
+        align-items: center;
+        border-top: 1px solid #292929;
+        padding: 9px 14px;
+        gap: 8px;
+      }
+      .prompt {
+        color: #fff;
+        user-select: none;
+      }
+      #command {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: #fff;
+        font: inherit;
+        font-size: 15px;
+      }
+      button {
+        font: inherit;
+        background: #191919;
+        color: #ddd;
+        border: 1px solid #3a3a3a;
+        border-radius: 4px;
+        padding: 6px 9px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #252525;
+      }
+      .status {
+        padding: 5px 14px;
+        border-top: 1px solid #222;
+        color: #888;
+        font-size: 12px;
+      }
+      .help {
+        padding: 0 14px 7px;
+        color: #666;
+        font-size: 11px;
+      }
+      @media (max-width: 700px) {
+        .terminal {
+          height: 98vh;
+        }
+        #screen {
+          font-size: 13px;
+        }
+        .bar button {
+          display: none;
+        }
+      }
 
-<!-- data -->
-<script src="items.js"></script>
-<script src="monsters.js"></script>
-<script src="dialogue.js"></script>
-<!-- game engine -->
-<script src="helpers.js"></script>
-<script src="playerGear.js"></script>
-<script src="crafting.js"></script>
-<script src="combat.js"></script>
-<script src="story.js"></script>
-<script src="saves.js"></script>
-<script src="commands.js"></script>
-<!-- terminal UI + start -->
-<script src="index.js"></script>
-</body>
+      /* ---------- Effects (see effects.js) ---------- */
+      .terminal {
+        position: relative;
+      }
+      .line {
+        animation: line-in 0.22s ease-out both;
+      }
+      @keyframes line-in {
+        from {
+          opacity: 0;
+          transform: translateY(3px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      /* line colors */
+      .fx-hurt {
+        color: #ff6b6b;
+        font-weight: bold;
+      }
+      .fx-hit {
+        color: #ffd479;
+      }
+      .fx-crit {
+        color: #ffe066;
+        font-weight: bold;
+        text-shadow: 0 0 8px #ffb300;
+      }
+      .fx-parry {
+        color: #7fd4ff;
+        font-weight: bold;
+      }
+      .fx-dodge {
+        color: #7ff0e0;
+      }
+      .fx-heal {
+        color: #6fe39a;
+      }
+      .fx-levelup {
+        color: #ffe066;
+        font-weight: bold;
+        text-shadow: 0 0 10px #ffb300;
+      }
+      .fx-win {
+        color: #6fe39a;
+        font-weight: bold;
+        text-shadow: 0 0 8px #1faa5a;
+      }
+      .fx-lose {
+        color: #ff4d4d;
+        font-weight: bold;
+        text-shadow: 0 0 10px #a00000;
+      }
+      .fx-chapter {
+        color: #c9a7ff;
+        font-weight: bold;
+        text-shadow: 0 0 12px #8a5cff;
+      }
+      .fx-encounter {
+        color: #ff9f6b;
+        font-weight: bold;
+      }
+      .fx-warning {
+        color: #ff9f1a;
+        font-weight: bold;
+        animation:
+          line-in 0.22s ease-out both,
+          pulse 0.7s ease-in-out 3;
+      }
+      .fx-loot {
+        color: #e6c86e;
+      }
+      .fx-status {
+        color: #d98cff;
+      }
+      .fx-turn-player {
+        color: #6fe39a;
+        font-weight: bold;
+      }
+      .fx-turn-enemy {
+        color: #ff6b6b;
+        font-weight: bold;
+      }
+      .fx-dim {
+        color: #666;
+      }
+      .fx-glitch {
+        color: #7ffff0;
+        animation:
+          line-in 0.22s ease-out both,
+          glitch 0.5s steps(2) 2;
+      }
+
+      /* status bars */
+      .bar-good {
+        color: #4ad27a;
+      }
+      .bar-warn {
+        color: #f0b429;
+      }
+      .bar-low {
+        color: #ff5252;
+      }
+      .bar-energy {
+        color: #5aa9ff;
+      }
+      .bar-empty {
+        color: #444;
+      }
+
+      @keyframes pulse {
+        50% {
+          opacity: 0.45;
+        }
+      }
+      @keyframes glitch {
+        0% {
+          text-shadow:
+            2px 0 #ff2e63,
+            -2px 0 #08d9d6;
+          transform: translateX(-2px);
+        }
+        50% {
+          text-shadow:
+            -2px 0 #ff2e63,
+            2px 0 #08d9d6;
+          transform: translateX(2px);
+        }
+        100% {
+          text-shadow: none;
+          transform: none;
+        }
+      }
+
+      /* screen shake and flash */
+      .shake {
+        animation: shake 0.25s linear;
+      }
+      .shake-strong {
+        animation: shake 0.45s linear;
+      }
+      @keyframes shake {
+        0%,
+        100% {
+          transform: translate(0, 0);
+        }
+        20% {
+          transform: translate(-6px, 2px);
+        }
+        40% {
+          transform: translate(5px, -3px);
+        }
+        60% {
+          transform: translate(-4px, 3px);
+        }
+        80% {
+          transform: translate(3px, -2px);
+        }
+      }
+      .fx-flash {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0;
+        z-index: 5;
+      }
+      .fx-flash.on {
+        animation: flash 0.45s ease-out;
+      }
+      @keyframes flash {
+        0% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+        }
+      }
+
+      /* floating damage numbers */
+      .fx-float {
+        position: absolute;
+        pointer-events: none;
+        z-index: 6;
+        font-size: 30px;
+        font-weight: bold;
+        animation: float-up 1s ease-out forwards;
+      }
+      .fx-float.hurt {
+        color: #ff5252;
+        text-shadow: 0 0 10px #a00000;
+      }
+      .fx-float.hit {
+        color: #ffd479;
+        text-shadow: 0 0 8px #8a5a00;
+      }
+      .fx-float.crit {
+        color: #ffe066;
+        font-size: 40px;
+        text-shadow: 0 0 14px #ffb300;
+      }
+      @keyframes float-up {
+        0% {
+          opacity: 0;
+          transform: translateY(10px) scale(0.7);
+        }
+        15% {
+          opacity: 1;
+          transform: translateY(0) scale(1.15);
+        }
+        100% {
+          opacity: 0;
+          transform: translateY(-60px) scale(1);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .line,
+        .shake,
+        .shake-strong,
+        .fx-warning,
+        .fx-glitch {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="terminal">
+      <div class="bar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span
+        ><span class="title">THE LAST SAVE — offline edition</span
+        ><span style="margin-left: auto"
+          ><button id="soundToggle">🔊 Sound on</button>
+          <button id="newGame">New Game</button></span
+        >
+      </div>
+      <div id="screen" tabindex="0"></div>
+      <div class="status" id="status">Ready</div>
+      <div class="help">
+        Enter = run command · ↑/↓ = history · saves are automatic in this browser · works fully
+        offline
+      </div>
+      <div class="input-row">
+        <span class="prompt">&gt;&gt;&gt;</span
+        ><input id="command" autocomplete="off" spellcheck="false" autofocus />
+      </div>
+    </div>
+
+    <!-- data -->
+    <script src="items.js"></script>
+    <script src="monsters.js"></script>
+    <script src="dialogue.js"></script>
+    <!-- game engine -->
+    <script src="helpers.js"></script>
+    <script src="playerGear.js"></script>
+    <script src="crafting.js"></script>
+    <script src="combat.js"></script>
+    <script src="story.js"></script>
+    <script src="saves.js"></script>
+    <script src="commands.js"></script>
+    <!-- terminal UI + start -->
+    <script src="effects.js"></script>
+    <script src="index.js"></script>
+  </body>
 </html>
