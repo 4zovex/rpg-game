@@ -6,7 +6,7 @@ const C = {
   CRIT: 25,
   CRIT_MULT: 1.5,
   MAX_ENERGY: 6,
-  START_ENERGY: 3,
+  START_ENERGY: 4,
   RECOVER: 2,
   ATTACK_GAIN: 1,
   HEAVY_COST: 2,
