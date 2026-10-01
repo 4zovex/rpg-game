@@ -1,42 +1,49 @@
 # THE LAST SAVE
 
-A turn-based crafting RPG with a fourth-wall campaign, as an offline HTML/JS game.
+A small turn-based RPG about crafting, fighting, and a world that knows you're playing it.
 
-## Play
+## 🎮 Play Now
 
-Open `index.html` in any modern browser (just double-click it). No server, install or internet connection needed.
-Progress autosaves in your browser; use `copy` / `load` to back up or move a save code.
+**[Play THE LAST SAVE](https://lseeecubb-code.github.io/rpg-game/)**
 
-## Files
+No download. No setup. Just open it and play.
 
-| File            | What it holds                                                               |
-| --------------- | --------------------------------------------------------------------------- |
-| `index.html`    | The terminal page; loads every script below                                 |
-| `index.js`      | Terminal UI, input handling, autosave, game start                           |
-| `items.js`      | Items, weapon skills, consumables, recipes, shop prices                     |
-| `monsters.js`   | Monsters and enemy attack defaults                                          |
-| `dialogue.js`   | Story chapters, areas, characters, quests, scenes, endings                  |
-| `helpers.js`    | Constants, game state, helpers, item categories, descriptions               |
-| `playerGear.js` | Stats, inventory, equipment, item info                                      |
-| `typewriter.js` | Types battle text like dialogue, with pauses (slower for dodges, misses...) |
-| `effects.js`    | Colors, screen shake/flash, floating damage numbers and sound effects       |
-| `crafting.js`   | Crafting and the shop                                                       |
-| `combat.js`     | Enemy AI, combat, fights, bestiary                                          |
-| `story.js`      | Story engine, objectives, chapter progress                                  |
-| `saves.js`      | Save codes (copy / load)                                                    |
-| `commands.js`   | Command router and main loop                                                |
-| `resources/`    | Reserved for extra assets                                                   |
+## 📖 About
 
-## Story
+THE LAST SAVE is a story-driven RPG with a strange twist: the game itself becomes part of the story.
 
-The campaign runs through Chapters 0-10. Chapters 6-10 (Archive of Attempts, Hollow Kingdom, Margin, Blank Page, Last Autosave) each end in a boss and unlock new gear; the final three-way choice now comes after The Last Save in Chapter 10. Old saves that already beat The Witness are moved on to Chapter 6.
+Explore different areas, fight enemies, collect gear, craft new items, and uncover what is really happening behind the world.
 
-## Battle text
+Your choices matter, and the further you go, the more the game starts to question what a "save" really means.
 
-During a fight, text is typed out like dialogue with a short pause after each line. Reaction lines (dodged, missed, parried, staggered...) are slower. Menus and status bars appear instantly. Press Enter, Space or Escape (or click the screen) to skip ahead, and use the Text button to switch between Normal, Fast and Instant. The pacing rules are in `typewriter.js`.
+## ⚔️ Gameplay
 
-## Effects
+* Turn-based battles
+* Crafting and equipment
+* Story choices and quests
+* Different areas and enemies
+* Multiple endings
 
-`effects.js` reacts to the text the game prints: colored lines, red flash and shake when you are hit, gold flash on crits and level-ups, floating damage numbers, colored HP/energy bars and short synthesized sounds (no audio files). Use the Sound button in the title bar to mute. Effects are skipped automatically if the browser asks for reduced motion. To add one, add an entry to `RULES` in `effects.js`.
+## 💾 Saves
 
-Scripts are plain classic `<script>` files (no modules or build step), so the game also works straight from `file://`.
+Your progress is automatically saved in your browser.
+
+You can also use the built-in save codes to copy your progress and load it somewhere else.
+
+## 📴 Play Offline
+
+You can play the game completely offline.
+
+To do this, download the project from GitHub and keep all the files together. Then open **`index.html`** in a modern browser.
+
+Once downloaded, you don't need a server, installation, or internet connection to play.
+
+## 📁 Project
+
+The game is built entirely with HTML, CSS and JavaScript, split into separate files to keep the code organized.
+
+---
+
+### Ready to play?
+
+**[Start THE LAST SAVE →](https://lseeecubb-code.github.io/rpg-game/)**
