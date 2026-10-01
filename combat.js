@@ -281,11 +281,29 @@ async function askAction(f) {
 // ---------- combat: actions ----------
 // Stuns the enemy for its coming turn: cancels its chosen move and any guard/stance.
 // Every stun source (items, skills) goes through here so they all behave the same.
+// Stun balance. Tweak these numbers to taste.
+const STUN = {
+  MAX_TURNS: 3, // longest stun any normal enemy can be put under
+  BOSS_MAX_TURNS: 2, // bosses (chance <= 0 in monsters.js) are capped lower
+  IMMUNE_TURNS: 1, // after a stun ends the enemy shrugs off new stuns for this many of its turns
+  PERFECT_TURNS: 2, // perfect parry (overridden by C.PERFECT_STUN_TURNS if you define it)
+  LONG_COST_MULT: 1.5, // skills costing >= HEAVY_COST * this auto-stun for 2 turns instead of 1
+};
+// Default stun length for a skill with no explicit `stun_turns`: big skills stun longer.
+function skillStunTurns(s) {
+  if (s.stun_turns) return s.stun_turns;
+  return s.cost >= C.HEAVY_COST * STUN.LONG_COST_MULT ? 2 : 1;
+}
 // `turns` = how many enemy turns are lost in total. Stuns don't stack; the longer one wins.
 // immediate=true: the enemy's coming turn is cancelled now (items, skills), so that counts as turn 1.
 // immediate=false: the enemy already acted this turn (perfect parry), so all `turns` are future turns.
 function stunEnemy(f, turns = 1, msg = "", immediate = true) {
-  turns = Math.max(1, int(turns));
+  const boss = f.monster.chance <= 0;
+  if (f.stun_immune > 0) {
+    print(`   🛡️ The ${f.name} shrugs it off - it's still recovering from being stunned!`);
+    return false;
+  }
+  turns = Math.min(boss ? STUN.BOSS_MAX_TURNS : STUN.MAX_TURNS, Math.max(1, int(turns)));
   if (immediate) {
     f.intent = { kind: "stunned", attack: null };
     f.guarding = false;
@@ -294,6 +312,7 @@ function stunEnemy(f, turns = 1, msg = "", immediate = true) {
   } else f.stun_turns = Math.max(f.stun_turns, turns);
   if (msg) print(msg);
   if (turns > 1) print(`   💫 It will be stunned for ${turns} turns!`);
+  return true;
 }
 function useItem(f, name) {
   const d = USABLE_ITEMS[name],
@@ -500,7 +519,7 @@ function useSkill(f, s) {
     // `stun` (true or a % chance) or the older `stagger` (% chance); `stun_turns` sets the duration.
     const stunChance = s.stun ? (s.stun === true ? 100 : s.stun) : s.stagger || 0;
     if (stunChance && percent(stunChance))
-      stunEnemy(f, s.stun_turns || 1, `   💫 The ${f.name} is stunned and loses its turn!`);
+      stunEnemy(f, skillStunTurns(s), `   💫 The ${f.name} is stunned and loses its turn!`);
   }
 }
 // Runs the player's turn: asks for an action and carries it out.
@@ -564,7 +583,7 @@ function resolveDefense(f, a, inc) {
     if (percent(C.PERFECT_PARRY)) {
       print("⚡ PERFECT PARRY!");
       print("You perfectly time your defense!");
-      stunEnemy(f, C.PERFECT_STUN_TURNS ?? 2, `The ${f.name} is stunned!`, false);
+      stunEnemy(f, C.PERFECT_STUN_TURNS ?? STUN.PERFECT_TURNS, `The ${f.name} is stunned!`, false);
       f.energy = Math.min(C.MAX_ENERGY, f.energy + C.PERFECT_ENERGY);
       print(`⚡ You restore ${C.PERFECT_ENERGY} energy.`);
       const c = Math.max(
@@ -682,6 +701,8 @@ function monsterTurn(f) {
   if (k === "stunned") {
     print(`😵 The ${name} is stunned and can't act!`);
     f.last_move = "was stunned and lost its turn";
+    // Last stunned turn: it recovers, then resists further stuns briefly.
+    if (f.stun_turns <= 0) f.stun_immune = STUN.IMMUNE_TURNS;
   } else if (k === "staggered") {
     print(`💫 The ${name} is staggered and can't act!`);
     f.last_move = "was staggered and lost its turn";
@@ -730,6 +751,7 @@ function monsterTurn(f) {
   }
   if (!attacked && ["guard", "parry", "dodge"].includes(f.choice))
     print(`(${cap(f.choice)} wasn't needed this turn.)`);
+  if (k !== "stunned" && f.stun_immune > 0) f.stun_immune--;
   f.guarding = false;
   f.stance = null;
   if (f.monster_hp <= 0) return;
@@ -775,6 +797,7 @@ function newFight(n) {
     guarding: false,
     stance: null,
     stun_turns: 0,
+    stun_immune: 0,
     staggered: false,
     last_move: null,
     intent: null,
