@@ -11,17 +11,13 @@ let pendingInput = null,
 // "what do you want to do?" prompt) stays on the same line as what the player types next.
 function write(text) {
   const endsLine = text.endsWith("\n");
-  const body = endsLine ? text.slice(0, -1) : text;
-  termScreen.appendChild(FX.renderLine(body, { plain: true, newline: endsLine }));
-  termScreen.scrollTop = termScreen.scrollHeight;
+  Typewriter.print(endsLine ? text.slice(0, -1) : text, { plain: true, newline: endsLine });
 }
 
-// The game's print(): each line goes through the effects system (colors, shakes, sounds...).
+// The game's print(): every line goes through the typewriter, which paces it (during battle)
+// and sends it to the effects system for colors, shakes and sounds.
 function print(...args) {
-  for (const line of args.join(" ").split("\n")) {
-    termScreen.appendChild(FX.renderLine(line));
-  }
-  termScreen.scrollTop = termScreen.scrollHeight;
+  for (const line of args.join(" ").split("\n")) Typewriter.print(line);
 }
 
 function autosave() {
@@ -34,9 +30,12 @@ function autosave() {
 }
 
 // The game awaits this wherever the Python version called input().
-function input(prompt = "") {
+// It waits for the typewriter to finish showing everything first, so the prompt never appears
+// in the middle of a battle line.
+async function input(prompt = "") {
   write(prompt);
   autosave();
+  await Typewriter.idle();
   return new Promise((resolve) => {
     pendingInput = resolve;
     termInput.focus();
@@ -44,6 +43,12 @@ function input(prompt = "") {
 }
 
 termInput.addEventListener("keydown", (e) => {
+  // While text is still typing out, Enter / Space / Escape skip ahead and other keys do nothing.
+  if (Typewriter.isBusy()) {
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) e.preventDefault();
+    if (["Enter", " ", "Escape"].includes(e.key)) Typewriter.skip();
+    return;
+  }
   if (e.key === "Enter") {
     e.preventDefault();
     const value = termInput.value;
@@ -82,6 +87,18 @@ document.getElementById("newGame").addEventListener("click", () => {
     location.reload();
   }
 });
+
+// Battles are shown like dialogue: wrap fightMonster() so the typewriter knows when one is running.
+// (This must come after commands.js and combat.js have been loaded.)
+const runFight = fightMonster;
+fightMonster = async function (...args) {
+  Typewriter.setBattle(true);
+  try {
+    return await runFight.apply(this, args);
+  } finally {
+    Typewriter.setBattle(false);
+  }
+};
 
 let savedCode = "";
 try {

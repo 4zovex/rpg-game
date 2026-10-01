@@ -9,26 +9,31 @@ Progress autosaves in your browser; use `copy` / `load` to back up or move a sav
 
 ## Files
 
-| File            | What it holds                                                         |
-| --------------- | --------------------------------------------------------------------- |
-| `index.html`    | The terminal page; loads every script below                           |
-| `index.js`      | Terminal UI, input handling, autosave, game start                     |
-| `items.js`      | Items, weapon skills, consumables, recipes, shop prices               |
-| `monsters.js`   | Monsters and enemy attack defaults                                    |
-| `dialogue.js`   | Story chapters, areas, characters, quests, scenes, endings            |
-| `helpers.js`    | Constants, game state, helpers, item categories, descriptions         |
-| `playerGear.js` | Stats, inventory, equipment, item info                                |
-| `effects.js`    | Colors, screen shake/flash, floating damage numbers and sound effects |
-| `crafting.js`   | Crafting and the shop                                                 |
-| `combat.js`     | Enemy AI, combat, fights, bestiary                                    |
-| `story.js`      | Story engine, objectives, chapter progress                            |
-| `saves.js`      | Save codes (copy / load)                                              |
-| `commands.js`   | Command router and main loop                                          |
-| `resources/`    | Reserved for extra assets                                             |
+| File            | What it holds                                                               |
+| --------------- | --------------------------------------------------------------------------- |
+| `index.html`    | The terminal page; loads every script below                                 |
+| `index.js`      | Terminal UI, input handling, autosave, game start                           |
+| `items.js`      | Items, weapon skills, consumables, recipes, shop prices                     |
+| `monsters.js`   | Monsters and enemy attack defaults                                          |
+| `dialogue.js`   | Story chapters, areas, characters, quests, scenes, endings                  |
+| `helpers.js`    | Constants, game state, helpers, item categories, descriptions               |
+| `playerGear.js` | Stats, inventory, equipment, item info                                      |
+| `typewriter.js` | Types battle text like dialogue, with pauses (slower for dodges, misses...) |
+| `effects.js`    | Colors, screen shake/flash, floating damage numbers and sound effects       |
+| `crafting.js`   | Crafting and the shop                                                       |
+| `combat.js`     | Enemy AI, combat, fights, bestiary                                          |
+| `story.js`      | Story engine, objectives, chapter progress                                  |
+| `saves.js`      | Save codes (copy / load)                                                    |
+| `commands.js`   | Command router and main loop                                                |
+| `resources/`    | Reserved for extra assets                                                   |
 
 ## Story
 
 The campaign runs through Chapters 0-10. Chapters 6-10 (Archive of Attempts, Hollow Kingdom, Margin, Blank Page, Last Autosave) each end in a boss and unlock new gear; the final three-way choice now comes after The Last Save in Chapter 10. Old saves that already beat The Witness are moved on to Chapter 6.
+
+## Battle text
+
+During a fight, text is typed out like dialogue with a short pause after each line. Reaction lines (dodged, missed, parried, staggered...) are slower. Menus and status bars appear instantly. Press Enter, Space or Escape (or click the screen) to skip ahead, and use the Text button to switch between Normal, Fast and Instant. The pacing rules are in `typewriter.js`.
 
 ## Effects
 

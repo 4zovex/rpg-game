@@ -8,8 +8,6 @@
 
 const FX = (() => {
   const SOUND_KEY = "the-last-save.sound";
-  const STAGGER_MS = 16; // delay between lines printed in the same burst
-  const STAGGER_MAX_MS = 500; // a long burst never takes longer than this to appear
 
   const terminal = document.querySelector(".terminal");
   const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -302,37 +300,24 @@ const FX = (() => {
 
   // ---------- Public API ----------
 
-  let burstCount = 0; // lines already queued in the current synchronous burst
-  let burstResetScheduled = false;
-
-  // Turns one line of game text into a DOM element, queuing its effects to fire as it appears.
+  // Turns one line of game text into a DOM element. Returns { el, trigger }: the typewriter adds
+  // `el` to the screen and calls `trigger()` when the line starts appearing, which fires the
+  // line's flash / shake / sound.
   function renderLine(line, { plain = false, newline = true } = {}) {
     const el = document.createElement("span");
     el.className = "line";
     el.append(buildContent(line), newline ? "\n" : "");
 
-    const delay = Math.min(burstCount * STAGGER_MS, STAGGER_MAX_MS);
-    burstCount++;
-    if (!burstResetScheduled) {
-      burstResetScheduled = true;
-      setTimeout(() => {
-        burstCount = 0;
-        burstResetScheduled = false;
-      }, 0);
-    }
-    if (!reduceMotion) el.style.animationDelay = `${delay}ms`;
-
-    if (!plain) {
-      const rule = RULES.find((r) => r.match.test(line));
-      if (rule) {
-        el.classList.add(rule.cls);
-        if (rule.run) {
-          const m = line.match(rule.match);
-          setTimeout(() => rule.run(m), reduceMotion ? 0 : delay);
-        }
+    let trigger = () => {};
+    const rule = plain ? null : RULES.find((r) => r.match.test(line));
+    if (rule) {
+      el.classList.add(rule.cls);
+      if (rule.run) {
+        const m = line.match(rule.match);
+        trigger = () => rule.run(m);
       }
     }
-    return el;
+    return { el, trigger };
   }
 
   document.getElementById("soundToggle")?.addEventListener("click", () => setSound(!soundOn));
