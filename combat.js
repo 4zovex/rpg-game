@@ -107,6 +107,8 @@ function showIntent(f) {
   print("\n=== ENEMY INTENT ===");
   if (k === "stunned") {
     print(`${icon} The ${name} is stunned and can't act this turn!`);
+    if (f.stun_turns > 0)
+      print(`   💫 Still stunned for ${f.stun_turns} more turn${f.stun_turns > 1 ? "s" : ""} after this.`);
     return;
   }
   if (k === "staggered") {
@@ -277,6 +279,22 @@ async function askAction(f) {
 }
 
 // ---------- combat: actions ----------
+// Stuns the enemy for its coming turn: cancels its chosen move and any guard/stance.
+// Every stun source (items, skills) goes through here so they all behave the same.
+// `turns` = how many enemy turns are lost in total. Stuns don't stack; the longer one wins.
+// immediate=true: the enemy's coming turn is cancelled now (items, skills), so that counts as turn 1.
+// immediate=false: the enemy already acted this turn (perfect parry), so all `turns` are future turns.
+function stunEnemy(f, turns = 1, msg = "", immediate = true) {
+  turns = Math.max(1, int(turns));
+  if (immediate) {
+    f.intent = { kind: "stunned", attack: null };
+    f.guarding = false;
+    f.stance = null;
+    f.stun_turns = Math.max(f.stun_turns, turns - 1);
+  } else f.stun_turns = Math.max(f.stun_turns, turns);
+  if (msg) print(msg);
+  if (turns > 1) print(`   💫 It will be stunned for ${turns} turns!`);
+}
 function useItem(f, name) {
   const d = USABLE_ITEMS[name],
     s = f.stats;
@@ -327,12 +345,12 @@ function useItem(f, name) {
     f.monster_hp -= d.damage;
     print(`   💣 It explodes! The ${f.name} takes ${d.damage} damage.`);
   }
-  if (d.stun) {
-    f.intent = { kind: "stunned", attack: null };
-    f.guarding = false;
-    f.stance = null;
-    print(`   💨 The ${f.name} is blinded and can't act this turn!`);
-  }
+  if (d.stun)
+    stunEnemy(
+      f,
+      d.stun_turns ?? (typeof d.stun === "number" ? d.stun : 1),
+      `   💨 The ${f.name} is blinded and can't act!`
+    );
   if (d.revive) {
     f.phoenix_available = true;
     print("   🔥 Phoenix protection is active! If you would be defeated, it will restore you.");
@@ -479,12 +497,10 @@ function useSkill(f, s) {
   }
   if (landed && f.monster_hp > 0) {
     if (s.effect) applyMonsterEffect(f, s.effect);
-    if (s.stagger && percent(s.stagger)) {
-      f.intent = { kind: "stunned", attack: null };
-      f.guarding = false;
-      f.stance = null;
-      print(`   💫 The ${f.name} is staggered and loses its turn!`);
-    }
+    // `stun` (true or a % chance) or the older `stagger` (% chance); `stun_turns` sets the duration.
+    const stunChance = s.stun ? (s.stun === true ? 100 : s.stun) : s.stagger || 0;
+    if (stunChance && percent(stunChance))
+      stunEnemy(f, s.stun_turns || 1, `   💫 The ${f.name} is stunned and loses its turn!`);
   }
 }
 // Runs the player's turn: asks for an action and carries it out.
@@ -548,8 +564,7 @@ function resolveDefense(f, a, inc) {
     if (percent(C.PERFECT_PARRY)) {
       print("⚡ PERFECT PARRY!");
       print("You perfectly time your defense!");
-      print(`The ${f.name} is stunned!`);
-      f.stunned = true;
+      stunEnemy(f, C.PERFECT_STUN_TURNS ?? 2, `The ${f.name} is stunned!`, false);
       f.energy = Math.min(C.MAX_ENERGY, f.energy + C.PERFECT_ENERGY);
       print(`⚡ You restore ${C.PERFECT_ENERGY} energy.`);
       const c = Math.max(
@@ -558,6 +573,8 @@ function resolveDefense(f, a, inc) {
       );
       f.monster_hp -= c;
       print(`⚔️ Counterattack deals ${c} damage!`);
+      // Fully nullified: no damage, no status effect, no drain heal for the enemy.
+      return 0;
     } else {
       print("⚔️ PARRY!");
       print("You deflect the attack!");
@@ -641,8 +658,8 @@ function monsterDealDamage(f, a, inc) {
 // Decides what the enemy will do on the coming turn.
 function rollIntent(f) {
   let it;
-  if (f.stunned) {
-    f.stunned = false;
+  if (f.stun_turns > 0) {
+    f.stun_turns--;
     it = { kind: "stunned", attack: null };
   } else if (f.staggered) it = { kind: "staggered", attack: null };
   else {
@@ -656,8 +673,8 @@ function rollIntent(f) {
 // Plays out the enemy's turn.
 function monsterTurn(f) {
   f.owner = "monster";
-  const name = f.name,
-    it = f.intent,
+  const name = f.name;
+  const it = f.intent,
     k = it.kind;
   print(`\n🔴 THE ${name.toUpperCase()}'S TURN`);
   f.staggered = false;
@@ -694,7 +711,8 @@ function monsterTurn(f) {
     print(`✨ The ${name} uses ${a.name.toUpperCase()}!`);
     f.last_move = a.name.toUpperCase();
     for (let n = 0; n < a.hits; n++) {
-      if (f.monster_hp <= 0 || f.player_hp <= 0) break;
+      // stun_turns can only become > 0 mid-attack via a perfect parry: stop the rest of the combo.
+      if (f.monster_hp <= 0 || f.player_hp <= 0 || f.stun_turns > 0) break;
       if (a.hits > 1) print(`   Strike ${n + 1}/${a.hits}:`);
       if (!percent(a.accuracy)) {
         print(`💨 ${a.name.toUpperCase()} misses you completely!`);
@@ -756,7 +774,7 @@ function newFight(n) {
     monster_effects: [],
     guarding: false,
     stance: null,
-    stunned: false,
+    stun_turns: 0,
     staggered: false,
     last_move: null,
     intent: null,
