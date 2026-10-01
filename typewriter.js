@@ -6,6 +6,10 @@
 // so you have time to take them in. Menus, status bars and everything outside battle appear
 // instantly.
 //
+// The ENEMY INTENT block (what the enemy is about to do) is paced like dialogue: its text types
+// out noticeably slower than the rest of the battle text, with a small pause after every line and
+// a soft blip per letter. To tune it, change the "intent" and "intentStat" tiers below.
+//
 // Press Enter, Space or Escape (or click the screen) to skip ahead. The "Text" button in the title
 // bar switches between Normal, Fast and Instant.
 
@@ -17,7 +21,16 @@ const Typewriter = (() => {
     instant: { msPerChar: 0, pause: 0 },
     event: { msPerChar: 12, pause: 220 }, // something happened
     reaction: { msPerChar: 28, pause: 550 }, // dodges, misses, parries, stuns: let it sink in
+    // Enemy intent: spoken, dialogue-style. The story lines are the slowest; the numbers
+    // (damage, accuracy, can-parry...) are a bit quicker so a turn doesn't drag on too long.
+    intent: { msPerChar: 36, pause: 600 },
+    intentStat: { msPerChar: 20, pause: 300 },
   };
+
+  // Lines inside the intent block that are plain numbers/checks rather than story text.
+  const INTENT_STAT = /^(Damage:|Type:|Element:|Accuracy:|Effect:|Drains:|[✓✗] |\s+(It will|Fast attacks))/;
+  const INTENT_START = /=== ENEMY INTENT ===/;
+  const INTENT_END = /YOUR TURN|=== YOUR ACTION ===|^===== Turn|THE .*'S TURN/;
 
   // First match wins. Lines that match nothing stay instant.
   const PACING_RULES = [
@@ -68,8 +81,17 @@ const Typewriter = (() => {
   const setBattle = (on) => (inBattle = on);
 
   // Decides how a line is paced. Pacing is only used during battle; everything else is instant.
+  let inIntent = false; // true while the lines of the ENEMY INTENT block are being queued
   function tierFor(line, plain) {
-    if (!inBattle || plain || !line.trim()) return "instant";
+    if (plain) inIntent = false; // prompts and typed commands end the block
+    if (!inBattle) {
+      inIntent = false;
+      return "instant";
+    }
+    if (plain || !line.trim()) return "instant";
+    if (INTENT_END.test(line)) inIntent = false;
+    if (INTENT_START.test(line)) inIntent = true;
+    if (inIntent) return INTENT_STAT.test(line) ? "intentStat" : "intent";
     const rule = PACING_RULES.find((r) => r.match.test(line));
     return rule ? rule.tier : "instant";
   }
@@ -147,6 +169,8 @@ const Typewriter = (() => {
     nodes.forEach((n) => (n.data = ""));
     const startedAt = performance.now();
     let shown = 0;
+    const flat = fullText.join("");
+    const blipKind = item.tier === "intent" ? "intent" : item.tier === "reaction" ? "talk" : null;
     finishNow = () => {
       cancelAnimationFrame(frameId);
       finishLine();
@@ -156,6 +180,7 @@ const Typewriter = (() => {
       const wanted = Math.min(total, Math.floor((now - startedAt) / msPerChar));
       if (wanted > shown) {
         shown = wanted;
+        if (blipKind && /\S/.test(flat[shown - 1] || "")) FX.blip(blipKind);
         let left = shown;
         nodes.forEach((n, i) => {
           const take = Math.max(0, Math.min(fullText[i].length, left));

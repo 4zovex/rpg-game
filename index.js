@@ -49,8 +49,11 @@ termInput.addEventListener("keydown", (e) => {
     if (["Enter", " ", "Escape"].includes(e.key)) Typewriter.skip();
     return;
   }
+  // Soft typing click for printable keys (and a slightly deeper one for backspace).
+  if (e.key.length === 1 || e.key === "Backspace") FX.play("key");
   if (e.key === "Enter") {
     e.preventDefault();
+    FX.play("enter");
     const value = termInput.value;
     termInput.value = "";
     if (!pendingInput) return;
