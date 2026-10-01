@@ -166,6 +166,8 @@ const ITEMS = {
   },
 };
 
+// Stun skills: `stagger` is the % chance to stun on a landed hit, `stun_turns` is how many
+// enemy turns are lost (see the STUN balance table in combat.js for caps and immunity).
 const SKILLS = {
   "twin slash": {
     desc: "Two quick slashes.",
@@ -176,11 +178,12 @@ const SKILLS = {
     name: "twin slash",
   },
   "guard breaker": {
-    desc: "A crushing strike that cracks through guards.",
+    desc: "A crushing strike that cracks through guards. May stun for 1 turn.",
     cost: 3,
     damage_mult: 1.2,
     ignore_guard: true,
     stagger: 35,
+    stun_turns: 1,
     name: "guard breaker",
   },
   cleave: {
@@ -217,21 +220,24 @@ const SKILLS = {
     name: "poison cut",
   },
   "skull crusher": {
-    desc: "A bone-rattling blow that can knock the enemy senseless.",
+    desc: "A bone-rattling blow that can knock the enemy senseless for 2 turns.",
     cost: 4,
     type: "heavy",
     damage_mult: 2.0,
-    stagger: 50,
-    cooldown: 2,
+    stagger: 45,
+    stun_turns: 2,
+    cooldown: 3,
     name: "skull crusher",
   },
   shatter: {
-    desc: "Slam the ground to break guards. Can't be dodged.",
+    desc: "Slam the ground to break guards. Can't be dodged. May stun for 1 turn.",
     cost: 3,
     type: "heavy",
     damage_mult: 1.3,
     ignore_guard: true,
     ignore_dodge: true,
+    stagger: 25,
+    stun_turns: 1,
     name: "shatter",
   },
   "piercing thrust": {
@@ -268,12 +274,14 @@ const SKILLS = {
     name: "volley",
   },
   "executioner swing": {
-    desc: "A huge, slow overhead chop.",
+    desc: "A huge, slow overhead chop. A direct hit can stun for 2 turns.",
     cost: 4,
     type: "slow",
     damage_mult: 2.4,
     hit_bonus: -10,
-    cooldown: 2,
+    stagger: 25,
+    stun_turns: 2,
+    cooldown: 3,
     name: "executioner swing",
   },
   whirlwind: {
@@ -375,7 +383,7 @@ const USABLE_ITEMS = {
   "fire resistance potion": { buff_fire_resistance: 50 },
   "frost resistance potion": { buff_frost_resistance: 50 },
   bomb: { damage: 30 },
-  "smoke flask": { stun: true },
+  "smoke flask": { stun: true, stun_turns: 2 },
 };
 
 const recipes = {
