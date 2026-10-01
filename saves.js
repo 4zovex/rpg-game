@@ -1,0 +1,33 @@
+// Save codes: copy / load / autosave format.
+const b64enc=s=>btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g,"-").replace(/\//g,"_");
+const b64dec=s=>{s=s.replace(/-/g,"+").replace(/_/g,"/");while(s.length%4)s+="=";return Uint8Array.from(atob(s),c=>c.charCodeAt(0));};
+function saveCode(){const inv={};for(const n in inventory)if(inventory[n]>0)inv[n]=inventory[n];
+  return "RPG2-"+b64enc(JSON.stringify({inventory:inv,equipment,player:PLAYER,story:{chapter:STORY.chapter,flags:[...STORY.flags].sort(),
+    seen_scenes:[...STORY.seen].sort(),fracture:STORY.fracture,ending:STORY.ending,kills:STORY.kills}}));}
+async function parseSave(code){let data;
+  try{if(code.startsWith("RPG2-"))data=JSON.parse(new TextDecoder().decode(b64dec(code.slice(5))));
+    else if(code.startsWith("RPG1-")){const ds=new DecompressionStream("deflate"),w=ds.writable.getWriter();w.write(b64dec(code.slice(5)));w.close();
+      data=JSON.parse(await new Response(ds.readable).text());}else throw 1;}
+  catch(e){throw new Error(code.startsWith("RPG")?"The save code is damaged or incomplete.":"That doesn't look like a save code.");}
+  const {inventory:inv,equipment:eq,player:pl}=data||{};if(!inv||!eq||!pl)throw new Error("The save data is missing sections.");
+  const cl={};for(const [n,a] of Object.entries(inv)){if(!Number.isInteger(a)||a<0)throw new Error(`Bad inventory entry: ${n}`);if(a>0)cl[n]=a;}
+  for(const s of SLOTS){const it=eq[s];if(!it)continue;if(!ITEMS[it]||ITEMS[it].id!==s)throw new Error(`Bad equipment in slot '${s}'.`);
+    if((cl[it]||0)<1)throw new Error(`Equipped ${it} isn't in the inventory.`);}
+  if(!Number.isInteger(pl.level)||pl.level<1||pl.level>C.MAX_LEVEL)throw new Error("Bad level in save data.");
+  if(!Number.isInteger(pl.xp)||pl.xp<0)throw new Error("Bad XP in save data.");return {inv:cl,eq,pl,st:data.story||{}};}
+function applySave({inv,eq,pl,st}){inventory=inv;SLOTS.forEach(s=>equipment[s]=eq[s]||null);PLAYER={level:pl.level,xp:pl.xp};
+  const ci=(v,lo,hi)=>Math.max(lo,Math.min(hi,parseInt(v)||0));STORY.chapter=ci(st.chapter,0,STORY_CHAPTERS.length-1);STORY.fracture=ci(st.fracture,0,10);
+  STORY.flags=new Set((st.flags||[]).map(String));STORY.seen=new Set((st.seen_scenes||[]).map(String));STORY.ending=ENDINGS[st.ending]?st.ending:null;
+  STORY.kills={};if(st.kills&&typeof st.kills==="object")for(const k in st.kills)STORY.kills[k]=ci(st.kills[k],0,1e9);
+  // Old saves ended the game after The Witness. The story now continues to Chapter 10.
+  if(STORY.flags.has("witness_defeated")){STORY.flags.delete("witness_defeated");STORY.flags.delete("ending_complete");STORY.ending=null;
+    STORY.flags.add("chapter_5_complete");STORY.chapter=Math.max(STORY.chapter,6);STORY.fracture=Math.max(STORY.fracture,6);STORY.flags.add("chapter_6_unlocked");
+    print("\n📖 The Witness is gone, but the world did not end. Chapter 6 is now open.");print("The final choice has moved to the end of Chapter 10.");}}
+function copyData(){const c=saveCode();print("\n--- Your Save Code ---");print(c);
+  if(navigator.clipboard)navigator.clipboard.writeText(c).then(()=>print("\n📋 Copied to your clipboard!"),()=>print("\n(Select and copy the code above.)"));
+  else print("\n(Select and copy the code above.)");}
+async function loadData(){const code=(await input("Paste your save code (blank to cancel): ")).trim();if(!code){print("Load cancelled.");return;}
+  let s;try{s=await parseSave(code);}catch(e){print(`❌ ${e.message}`);return;}
+  const c=(await input("This will replace your current progress. Continue? (y/n): ")).trim().toLowerCase();if(c!=="y"&&c!=="yes"){print("Load cancelled.");return;}
+  applySave(s);print(`✅ Save loaded! Level ${PLAYER.level}, ${inventory.coin||0} coin, Chapter ${STORY.chapter}.`);}
+

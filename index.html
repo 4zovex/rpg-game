@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>THE LAST SAVE</title>
+<link rel="icon" href="icon-image.png">
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}html,body{margin:0;height:100%;background:#050505}body{font-family:Consolas,"Courier New",monospace;color:#e8e8e8;display:flex;align-items:center;justify-content:center;padding:14px}.terminal{width:min(1100px,100%);height:min(820px,96vh);display:flex;flex-direction:column;background:#0b0b0b;border:1px solid #333;border-radius:8px;box-shadow:0 18px 50px #000;overflow:hidden}.bar{height:38px;flex:0 0 38px;background:#191919;border-bottom:1px solid #333;display:flex;align-items:center;gap:8px;padding:0 12px;color:#aaa;font-size:13px}.dot{width:11px;height:11px;border-radius:50%;background:#555}.title{margin-left:8px}#screen{flex:1;overflow:auto;padding:14px 16px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.35;font-size:15px;cursor:text}.input-row{display:flex;align-items:center;border-top:1px solid #292929;padding:9px 14px;gap:8px}.prompt{color:#fff;user-select:none}#command{flex:1;min-width:0;border:0;outline:0;background:transparent;color:#fff;font:inherit;font-size:15px}button{font:inherit;background:#191919;color:#ddd;border:1px solid #3a3a3a;border-radius:4px;padding:6px 9px;cursor:pointer}button:hover{background:#252525}.status{padding:5px 14px;border-top:1px solid #222;color:#888;font-size:12px}.help{padding:0 14px 7px;color:#666;font-size:11px}@media(max-width:700px){.terminal{height:98vh}#screen{font-size:13px}.bar button{display:none}}
+</style>
+</head>
+<body>
+<div class="terminal">
+  <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="title">THE LAST SAVE — offline edition</span><span style="margin-left:auto"><button id="newGame">New Game</button></span></div>
+  <div id="screen" tabindex="0"></div>
+  <div class="status" id="status">Ready</div>
+  <div class="help">Enter = run command · ↑/↓ = history · saves are automatic in this browser · works fully offline</div>
+  <div class="input-row"><span class="prompt">&gt;&gt;&gt;</span><input id="command" autocomplete="off" spellcheck="false" autofocus></div>
+</div>
+
+<!-- data -->
+<script src="items.js"></script>
+<script src="monsters.js"></script>
+<script src="dialogue.js"></script>
+<!-- game engine -->
+<script src="helpers.js"></script>
+<script src="playerGear.js"></script>
+<script src="crafting.js"></script>
+<script src="combat.js"></script>
+<script src="story.js"></script>
+<script src="saves.js"></script>
+<script src="commands.js"></script>
+<!-- terminal UI + start -->
+<script src="index.js"></script>
+</body>
+</html>
