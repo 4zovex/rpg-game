@@ -5,49 +5,76 @@
  * Use:     admin <command> <arg> <arg> ...      (type  admin)
  *
  * Load AFTER index.js:  <script src="admin.js"></script>
- *
- * The script finds the player/state object by itself. If it picks the wrong
- * one, put the right global variable name first in CANDIDATES.
+ * Does not modify commands.js, COMMANDS, ORDER or ALIASES.
  */
 (function () {
   "use strict";
 
-  const CANDIDATES = ["PLAYER", "state", "player", "game", "gameState", "G", "S", "save", "hero", "p"];
-  const SAVERS = ["saveGame", "save", "autosave", "writeSave", "persist"];
-  const STAT_KEY = /^(hp|health|level|lvl|gold|xp|exp|energy|coins|money)$/i;
-  const INV_KEY = /^(inventory|inv|items|bag|backpack)$/i;
-
+  // Indirect eval reads global let/const/var, and sees them fresh after applySave().
   const readGlobal = (name) => {
-    try { return (0, eval)(name); } catch (e) { return undefined; } // sees global let/const too
+    try { return (0, eval)(name); } catch (e) { return undefined; }
   };
   const isObj = (v) => v !== null && typeof v === "object";
-  const statScore = (o) => (isObj(o) ? Object.keys(o).filter((k) => STAT_KEY.test(k)).length : 0);
 
-  function findState() {
-    const main = readGlobal("PLAYER"); // THE LAST SAVE keeps the player here
-    if (isObj(main)) return main;
-    for (const name of CANDIDATES) {
-      const o = readGlobal(name);
-      if (statScore(o) > 0) return o;
-      if (isObj(o) && statScore(o.player) > 0) return o.player;
-    }
-    return null;
+  // Everything an admin can touch, under short prefixes: player.* inventory.* equipment.* story.*
+  function root() {
+    const player = readGlobal("PLAYER"), inventory = readGlobal("inventory");
+    const equipment = readGlobal("equipment"), story = readGlobal("STORY");
+    if (!isObj(player) || !isObj(inventory) || !isObj(story)) return null;
+    return { player, inventory, equipment, story };
   }
 
   // ---------- output ----------
-  function out(text, cls) {
+  // Output goes through the game's own write()/print() (index.js) so it flows through the
+  // typewriter and the open "what do you want to do? " line stays consistent.
+  let sink = null; // while an admin command runs, its output is collected here
+  const gameFn = (name) => { const f = readGlobal(name); return typeof f === "function" ? f : null; };
+
+  function rawPrint(text) {
+    const print = gameFn("print");
+    if (print) return print(text);
     const screen = document.getElementById("screen");
     if (!screen) return;
     String(text).split("\n").forEach((ln) => {
       const div = document.createElement("div");
-      div.className = "line " + (cls || "fx-dim");
+      div.className = "line";
       div.textContent = ln;
       screen.appendChild(div);
     });
     screen.scrollTop = screen.scrollHeight;
   }
-  const ok = (t) => out(t, "fx-heal");
-  const bad = (t) => out(t, "fx-hurt");
+
+  function out(text) { sink ? sink.push(String(text)) : rawPrint(text); }
+  const ok = out;
+  const bad = out;
+
+  // True while the game is waiting on its input() promise, i.e. a prompt line is open.
+  const atPrompt = () => !!readGlobal("pendingInput");
+  function openPromptText() {
+    const screen = document.getElementById("screen");
+    const el = screen && screen.lastElementChild;
+    const t = el ? el.textContent : "";
+    return t.length <= 80 ? t : "";
+  }
+
+  // Show lines below the open prompt, then put the prompt back so the player's next
+  // command echoes exactly as it normally would. `echo` is what the player typed.
+  function emit(text, echo) {
+    const write = gameFn("write");
+    const prompting = write && atPrompt();
+    const prompt = prompting ? openPromptText() : "";
+    if (prompting) write((echo === undefined ? "" : echo) + "\n"); // closes the prompt line
+    rawPrint(text);
+    if (prompting && prompt) write(prompt);
+  }
+
+  // Save right away, but only if the game could load it again (the game's own validator).
+  async function persist() {
+    const parse = gameFn("parseSave"), code = gameFn("saveCode"), auto = gameFn("autosave");
+    if (!parse || !code || !auto) return null;
+    try { await parse(code()); auto(); return null; }
+    catch (e) { return "(not autosaved - this state wouldn't load: " + e.message + ")"; }
+  }
 
   // ---------- helpers ----------
   function parseArg(s) {
@@ -67,9 +94,7 @@
     return t;
   }
 
-  function getPath(obj, path) {
-    return path.split(".").reduce((o, k) => (isObj(o) ? o[k] : undefined), obj);
-  }
+  const getPath = (obj, path) => path.split(".").reduce((o, k) => (isObj(o) ? o[k] : undefined), obj);
 
   function setPath(obj, path, value) {
     const keys = path.split(".");
@@ -82,38 +107,49 @@
     o[last] = value;
   }
 
-  // Resolve a field name case-insensitively (so "gold" finds "Gold").
+  // Case-insensitive path, so "story.Chapter" finds "story.chapter". Item names keep spaces via quotes.
   function resolvePath(obj, path) {
-    const keys = path.split(".");
     let o = obj;
-    const real = [];
-    for (const k of keys) {
-      if (!isObj(o)) { real.push(k); continue; }
-      const hit = Object.keys(o).find((x) => x.toLowerCase() === k.toLowerCase());
-      real.push(hit || k);
-      o = o[hit || k];
-    }
-    return real.join(".");
-  }
-
-  function findKey(obj, re) {
-    return Object.keys(obj).find((k) => re.test(k) && typeof obj[k] === "number");
-  }
-
-  function trySave() {
-    for (const name of SAVERS) {
-      const fn = readGlobal(name);
-      if (typeof fn === "function") {
-        try { fn(); return name + "()"; } catch (e) { /* try next */ }
-      }
-    }
-    return null;
+    return path.split(".").map((k) => {
+      if (!isObj(o)) return k;
+      const hit = Object.keys(o).find((x) => x.toLowerCase() === k.toLowerCase()) || k;
+      o = o[hit];
+      return hit;
+    }).join(".");
   }
 
   const brief = (v) => {
+    if (v instanceof Set) v = [...v];
     const s = typeof v === "string" ? v : JSON.stringify(v);
     return s === undefined ? String(v) : s.length > 300 ? s.slice(0, 300) + "..." : s;
   };
+
+  const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+
+  // Item names live as keys of the global ITEMS table.
+  function resolveItem(name) {
+    const items = readGlobal("ITEMS");
+    if (!isObj(items)) return { name }; // can't validate; trust the player
+    const keys = Object.keys(items);
+    const lower = name.toLowerCase();
+    const exact = keys.find((k) => k.toLowerCase() === lower);
+    if (exact) return { name: exact };
+    const part = keys.filter((k) => k.toLowerCase().includes(lower));
+    if (part.length === 1) return { name: part[0] };
+    return {
+      error: part.length
+        ? "'" + name + "' matches several items: " + part.slice(0, 8).join(", ")
+        : "Unknown item '" + name + "'. Use the names from 'info' or 'recipes'.",
+    };
+  }
+
+  // "iron sword 2" -> { name: "iron sword", count: 2 }
+  function nameAndCount(args) {
+    const a = args.slice();
+    let count = 1;
+    if (a.length > 1 && /^\d+$/.test(a[a.length - 1])) count = Number(a.pop());
+    return { name: a.join(" "), count };
+  }
 
   // ---------- admin commands ----------
   const commands = {
@@ -121,131 +157,136 @@
       out(
         [
           "admin commands (type admin on its own to see this list):",
-          "  admin show [path]            show the player, or one field (e.g. inventory.potion)",
-          "  admin set <path> <value>     set a field   (admin set hp 50)",
+          "  admin show [path]            overview, or one value: player.level, inventory.coin, story.flags",
+          "  admin set <path> <value>     set any value   (admin set story.fracture 4)",
           "  admin add <path> <n>         add to a number (negative subtracts)",
-          "  admin heal                   restore hp and energy",
-          "  admin gold <n>               add gold",
-          "  admin level <n>              set level",
-          "  admin give <item> [n]        add item(s) to the inventory",
-          "  admin take <item> [n]        remove item(s) from the inventory",
+          "  admin gold <n>               add coin (n can be negative)",
+          "  admin level <n>              set your level",
+          "  admin xp <n>                 add xp",
+          "  admin give <item> [n]        add items   (admin give iron sword 2)",
+          "  admin take <item> [n]        remove items",
+          "  admin chapter <n>            jump to a chapter",
+          "  admin fracture <n>           set fracture (0-10)",
           "  admin flag <name> [off]      set/clear a story flag (admin flag final_defeated)",
           "  admin flag                   list story flags",
           "  admin call <fn> [args...]    call any global game function",
-          "  admin save                   save the game",
+          "  admin code                   print your save code",
+          "  admin save                   autosave now (changes are also saved automatically)",
           "  admin lock                   turn admin off",
         ].join("\n"),
         "fx-loot"
       );
     },
 
-    show(s, [path]) {
+    show(r, [path]) {
       if (!path) {
-        Object.keys(s).forEach((k) => {
-          if (typeof s[k] !== "function") out(k + ": " + brief(s[k]));
-        });
+        const st = r.story, chs = readGlobal("STORY_CHAPTERS");
+        const title = Array.isArray(chs) && chs[st.chapter] && (chs[st.chapter].title || "");
+        out("player: " + brief(r.player));
+        out("coin: " + (r.inventory.coin || 0));
+        out("chapter: " + st.chapter + (title ? " (" + title + ")" : ""));
+        out("fracture: " + st.fracture + "   ending: " + st.ending);
+        out("flags: " + ([...st.flags].join(", ") || "(none)"));
+        out("equipment: " + brief(r.equipment));
+        out("inventory: " + brief(r.inventory));
         return;
       }
-      const real = resolvePath(s, path);
-      const v = getPath(s, real);
-      if (v === undefined) return bad("No field '" + path + "'. Try: admin show");
+      const real = resolvePath(r, path);
+      const v = getPath(r, real);
+      if (v === undefined) return bad("No value at '" + path + "'. Roots: player, inventory, equipment, story");
       out(real + " = " + brief(v));
     },
 
-    set(s, [path, ...rest]) {
+    set(r, [path, ...rest]) {
       if (!path || !rest.length) return bad("Usage: admin set <path> <value>");
-      const real = resolvePath(s, path);
+      const real = resolvePath(r, path);
       const value = parseArg(rest.join(" "));
-      setPath(s, real, value);
+      setPath(r, real, value);
       ok(real + " = " + brief(value));
     },
 
-    add(s, [path, n]) {
+    add(r, [path, n]) {
       if (!path || n === undefined) return bad("Usage: admin add <path> <n>");
-      const real = resolvePath(s, path);
-      const cur = getPath(s, real);
+      const real = resolvePath(r, path);
+      const cur = getPath(r, real);
       const num = Number(n);
       if (typeof cur !== "number" || Number.isNaN(num)) return bad(real + " is not a number");
-      setPath(s, real, cur + num);
+      setPath(r, real, cur + num);
       ok(real + " = " + (cur + num));
     },
 
-    heal(s) {
-      const hp = findKey(s, /^(hp|health)$/i);
-      if (!hp) return bad("No hp field found");
-      const max = findKey(s, /^(max_?hp|maxhealth|hpmax|max_?health)$/i);
-      s[hp] = max ? s[max] : Math.max(s[hp], 999);
-      const en = findKey(s, /^energy$/i);
-      const enMax = findKey(s, /^(max_?energy|energymax)$/i);
-      if (en && enMax) s[en] = s[enMax];
-      ok("Healed: " + hp + " = " + s[hp]);
-    },
-
-    gold(s, [n]) {
-      const k = findKey(s, /^(gold|coins|money)$/i);
-      if (!k) return bad("No gold field found");
+    gold(r, [n]) {
       const num = Number(n);
-      if (Number.isNaN(num)) return bad("Usage: admin gold <n>");
-      s[k] += num;
-      ok(k + " = " + s[k]);
+      if (n === undefined || Number.isNaN(num)) return bad("Usage: admin gold <n>");
+      r.inventory.coin = Math.max(0, (r.inventory.coin || 0) + num);
+      ok("coin = " + r.inventory.coin);
     },
 
-    level(s, [n]) {
-      const k = findKey(s, /^(level|lvl)$/i);
-      const num = Number(n);
-      if (!k || Number.isNaN(num)) return bad(k ? "Usage: admin level <n>" : "No level field found");
-      s[k] = num;
-      ok(k + " = " + num);
+    level(r, [n]) {
+      const max = (readGlobal("C") || {}).MAX_LEVEL || 99;
+      const num = Math.floor(Number(n));
+      if (n === undefined || Number.isNaN(num)) return bad("Usage: admin level <n>  (1-" + max + ")");
+      r.player.level = clamp(num, 1, max);
+      ok("level = " + r.player.level);
     },
 
-    give(s, [item, n]) {
-      if (!item) return bad("Usage: admin give <item> [n]");
-      const invKey = Object.keys(s).find((k) => INV_KEY.test(k) && isObj(s[k]));
-      if (!invKey) return bad("No inventory found on the player");
-      const inv = s[invKey];
-      const count = n === undefined ? 1 : Number(n);
-      if (Number.isNaN(count)) return bad("Usage: admin give <item> [n]");
-      if (Array.isArray(inv)) {
-        for (let i = 0; i < count; i++) inv.push(item);
-        ok("Added " + count + " x " + item + " to " + invKey + " (list)");
-      } else {
-        const real = Object.keys(inv).find((k) => k.toLowerCase() === item.toLowerCase()) || item;
-        inv[real] = (Number(inv[real]) || 0) + count;
-        ok(real + " x" + inv[real] + " in " + invKey);
-      }
+    xp(r, [n]) {
+      const num = Math.floor(Number(n));
+      if (n === undefined || Number.isNaN(num)) return bad("Usage: admin xp <n>");
+      r.player.xp = Math.max(0, (r.player.xp || 0) + num);
+      ok("xp = " + r.player.xp);
     },
 
-    take(s, [item, n]) {
-      if (!item) return bad("Usage: admin take <item> [n]");
-      const invKey = Object.keys(s).find((k) => INV_KEY.test(k) && isObj(s[k]));
-      if (!invKey) return bad("No inventory found on the player");
-      const inv = s[invKey];
-      const count = n === undefined ? 1 : Number(n);
-      if (Array.isArray(inv)) {
-        let removed = 0;
-        for (let i = inv.length - 1; i >= 0 && removed < count; i--) {
-          const e = inv[i];
-          const name = typeof e === "string" ? e : e && (e.id || e.name);
-          if (String(name).toLowerCase() === item.toLowerCase()) { inv.splice(i, 1); removed++; }
+    give(r, args) {
+      const { name, count } = nameAndCount(args);
+      if (!name) return bad("Usage: admin give <item> [n]");
+      const it = resolveItem(name);
+      if (it.error) return bad(it.error);
+      r.inventory[it.name] = (r.inventory[it.name] || 0) + count;
+      ok(it.name + " x" + r.inventory[it.name]);
+    },
+
+    take(r, args) {
+      const { name, count } = nameAndCount(args);
+      if (!name) return bad("Usage: admin take <item> [n]");
+      const it = resolveItem(name);
+      if (it.error) return bad(it.error);
+      const left = Math.max(0, (r.inventory[it.name] || 0) - count);
+      if (left > 0) r.inventory[it.name] = left; else delete r.inventory[it.name];
+      // A save is invalid if an equipped item isn't in the inventory, so unequip it.
+      if (left < 1 && isObj(r.equipment)) {
+        for (const slot of Object.keys(r.equipment)) {
+          if (r.equipment[slot] === it.name) { r.equipment[slot] = null; out("(unequipped " + it.name + ")"); }
         }
-        ok("Removed " + removed + " x " + item);
-      } else {
-        const real = Object.keys(inv).find((k) => k.toLowerCase() === item.toLowerCase());
-        if (!real) return bad("No '" + item + "' in " + invKey);
-        inv[real] = Math.max(0, (Number(inv[real]) || 0) - count);
-        ok(real + " x" + inv[real] + " in " + invKey);
       }
+      ok(it.name + " x" + left);
     },
 
-    flag(s, [name, mode]) {
-      const story = readGlobal("STORY");
-      if (!story || !(story.flags instanceof Set)) return bad("STORY.flags not found");
-      if (!name) return out("flags: " + ([...story.flags].join(", ") || "(none)"));
-      if (mode && mode.toLowerCase() === "off") { story.flags.delete(name); ok("flag cleared: " + name); }
-      else { story.flags.add(name); ok("flag set: " + name); }
+    chapter(r, [n]) {
+      const chs = readGlobal("STORY_CHAPTERS");
+      const hi = Array.isArray(chs) ? chs.length - 1 : 99;
+      const num = Math.floor(Number(n));
+      if (n === undefined || Number.isNaN(num)) return bad("Usage: admin chapter <n>  (0-" + hi + ")");
+      r.story.chapter = clamp(num, 0, hi);
+      ok("chapter = " + r.story.chapter);
     },
 
-    call(s, [fnName, ...args]) {
+    fracture(r, [n]) {
+      const num = Math.floor(Number(n));
+      if (n === undefined || Number.isNaN(num)) return bad("Usage: admin fracture <n>  (0-10)");
+      r.story.fracture = clamp(num, 0, 10);
+      ok("fracture = " + r.story.fracture);
+    },
+
+    flag(r, [name, mode]) {
+      const flags = r.story.flags;
+      if (!(flags instanceof Set)) return bad("STORY.flags is not a Set");
+      if (!name) return out("flags: " + ([...flags].join(", ") || "(none)"));
+      if (mode && mode.toLowerCase() === "off") { flags.delete(name); ok("flag cleared: " + name); }
+      else { flags.add(name); ok("flag set: " + name); }
+    },
+
+    call(r, [fnName, ...args]) {
       if (!fnName) return bad("Usage: admin call <fn> [args...]");
       const fn = readGlobal(fnName);
       if (typeof fn !== "function") return bad("No global function '" + fnName + "'");
@@ -253,34 +294,52 @@
       ok(fnName + "() done" + (result !== undefined ? " -> " + brief(result) : ""));
     },
 
-    save() {
-      const used = trySave();
-      used ? ok("Saved via " + used) : bad("No save function found; the game may autosave on your next action");
+    async save() {
+      const problem = await persist();
+      return problem || "Autosaved.";
+    },
+
+    code() {
+      const fn = readGlobal("saveCode");
+      if (typeof fn !== "function") return bad("saveCode() not found");
+      out(fn(), "fx-loot");
     },
   };
 
-  function runAdmin(line) {
+  // Commands that don't need a loaded game, and ones that never change anything.
+  const NO_STATE = new Set(["help", "call"]);
+  const READ_ONLY = new Set(["help", "show", "code", "save"]);
+
+  async function runAdmin(line) {
     const [, sub = "help", ...args] = tokenize(line);
     const name = sub.toLowerCase();
+    sink = [];
+    let after = null;
 
     if (name === "lock") {
       unlocked = false;
-      return out("[admin access removed]", "fx-warning");
+      out("[admin access removed]");
+    } else if (!Object.prototype.hasOwnProperty.call(commands, name)) {
+      out("Unknown admin command '" + sub + "'. Type: admin");
+    } else {
+      const r = root();
+      if (!r && !NO_STATE.has(name)) {
+        out("The game state isn't ready yet. Start or load a game first.");
+      } else {
+        try {
+          const result = await commands[name](r, args);
+          if (typeof result === "string") out(result);
+          if (!READ_ONLY.has(name)) after = persist();
+        } catch (e) {
+          out("admin " + name + " failed: " + e.message);
+        }
+      }
     }
-    if (!Object.prototype.hasOwnProperty.call(commands, name)) {
-      return bad("Unknown admin command '" + sub + "'. Type: admin");
-    }
-    const state = findState();
-    if (!state && name !== "help" && name !== "call" && name !== "flag") {
-      return bad(
-        "No player object found. Start or load a game first, or add your state variable's name to CANDIDATES in admin.js."
-      );
-    }
-    try {
-      commands[name](state, args);
-    } catch (e) {
-      bad("admin " + name + " failed: " + e.message);
-    }
+
+    const lines = sink.join("\n");
+    sink = null;
+    emit(lines, line);
+    if (after) { const warn = await after; if (warn) emit(warn); }
   }
 
   // ---------- unlock via the load command ----------
@@ -288,10 +347,10 @@
   let awaitingLoad = false; // the player typed "load" and the game is asking for a code
   let eatEnter = false;     // swallow the matching keypress/keyup of a handled Enter
 
-  function unlock() {
+  function unlock(echo) {
     awaitingLoad = false;
     unlocked = true;
-    out("[admin access granted]  type: admin", "fx-glitch");
+    emit("[admin access granted]  type: admin", echo);
   }
 
   // First word of a line as the game would resolve it ("load", "19" ...).
@@ -301,6 +360,12 @@
       if (typeof resolveCommand === "function") return resolveCommand(first);
     } catch (e) { /* fall through */ }
     return first;
+  }
+
+  // Let the up-arrow recall admin commands like any other command.
+  function rememberInHistory(line) {
+    try { (0, eval)("cmdHistory.push(" + JSON.stringify(line) + "); cmdIndex = cmdHistory.length"); }
+    catch (e) { /* history is optional */ }
   }
 
   const cmd = document.getElementById("command");
@@ -323,14 +388,20 @@
       // "load admin" typed in one line
       if (/^load\s+admin$/.test(lower)) {
         swallow();
-        return unlock();
+        return unlock(line);
       }
 
       // "admin" typed at the load prompt. Let an EMPTY line through so the game's
       // load prompt ends instead of waiting forever.
       if (awaitingLoad && lower === "admin") {
-        unlock();
+        awaitingLoad = false;
+        unlocked = true;
         cmd.value = "";
+        // Say so only once the game has cancelled the load and is back at a prompt.
+        const say = () => emit("[admin access granted]  type: admin");
+        const wait = (tries) =>
+          atPrompt() || tries <= 0 ? say() : setTimeout(() => wait(tries - 1), 50);
+        setTimeout(() => wait(60), 30); // first tick lets the game consume the empty line
         return;
       }
 
@@ -339,7 +410,9 @@
       // "admin <command> ..." once unlocked
       if (unlocked && (lower === "admin" || lower.startsWith("admin "))) {
         swallow();
-        out(">>> " + line, "fx-dim");
+        rememberInHistory(line);
+        const fx = readGlobal("FX");
+        if (fx && fx.play) fx.play("enter");
         runAdmin(line);
       }
     },
