@@ -124,7 +124,6 @@ async function runGame(savedCode) {
   showMainMenu();
   try {
     while (true) {
-      keyHint();
       await doFunction((await input("\nwhat do you want to do? ")).trim());
     }
   } catch (e) {
