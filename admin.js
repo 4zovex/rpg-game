@@ -2,7 +2,7 @@
  *
  * Unlock:  type  load  then, at the load prompt, type  admin
  *          (typing  load admin  on one line works too)
- * Use:     admin <command> <arg> <arg> ...      (type  admin help)
+ * Use:     admin <command> <arg> <arg> ...      (type  admin)
  *
  * Load AFTER index.js:  <script src="admin.js"></script>
  *
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  const CANDIDATES = ["state", "player", "game", "gameState", "G", "S", "save", "hero", "p"];
+  const CANDIDATES = ["PLAYER", "state", "player", "game", "gameState", "G", "S", "save", "hero", "p"];
   const SAVERS = ["saveGame", "save", "autosave", "writeSave", "persist"];
   const STAT_KEY = /^(hp|health|level|lvl|gold|xp|exp|energy|coins|money)$/i;
   const INV_KEY = /^(inventory|inv|items|bag|backpack)$/i;
@@ -24,6 +24,8 @@
   const statScore = (o) => (isObj(o) ? Object.keys(o).filter((k) => STAT_KEY.test(k)).length : 0);
 
   function findState() {
+    const main = readGlobal("PLAYER"); // THE LAST SAVE keeps the player here
+    if (isObj(main)) return main;
     for (const name of CANDIDATES) {
       const o = readGlobal(name);
       if (statScore(o) > 0) return o;
@@ -127,6 +129,8 @@
           "  admin level <n>              set level",
           "  admin give <item> [n]        add item(s) to the inventory",
           "  admin take <item> [n]        remove item(s) from the inventory",
+          "  admin flag <name> [off]      set/clear a story flag (admin flag final_defeated)",
+          "  admin flag                   list story flags",
           "  admin call <fn> [args...]    call any global game function",
           "  admin save                   save the game",
           "  admin lock                   turn admin off",
@@ -233,6 +237,14 @@
       }
     },
 
+    flag(s, [name, mode]) {
+      const story = readGlobal("STORY");
+      if (!story || !(story.flags instanceof Set)) return bad("STORY.flags not found");
+      if (!name) return out("flags: " + ([...story.flags].join(", ") || "(none)"));
+      if (mode && mode.toLowerCase() === "off") { story.flags.delete(name); ok("flag cleared: " + name); }
+      else { story.flags.add(name); ok("flag set: " + name); }
+    },
+
     call(s, [fnName, ...args]) {
       if (!fnName) return bad("Usage: admin call <fn> [args...]");
       const fn = readGlobal(fnName);
@@ -259,7 +271,7 @@
       return bad("Unknown admin command '" + sub + "'. Type: admin");
     }
     const state = findState();
-    if (!state && name !== "help" && name !== "call") {
+    if (!state && name !== "help" && name !== "call" && name !== "flag") {
       return bad(
         "No player object found. Start or load a game first, or add your state variable's name to CANDIDATES in admin.js."
       );
@@ -273,7 +285,8 @@
 
   // ---------- unlock via the load command ----------
   let unlocked = false;
-  let awaitingLoad = false; // true after the player typed a bare "load"
+  let awaitingLoad = false; // the player typed "load" and the game is asking for a code
+  let eatEnter = false;     // swallow the matching keypress/keyup of a handled Enter
 
   function unlock() {
     awaitingLoad = false;
@@ -281,41 +294,71 @@
     out("[admin access granted]  type: admin", "fx-glitch");
   }
 
-  const cmd = document.getElementById("command");
-  if (cmd) {
-    cmd.addEventListener(
-      "keydown",
-      (e) => {
-        if (e.key !== "Enter") return;
-        const line = cmd.value.trim();
-        const lower = line.toLowerCase();
-
-        const swallow = () => {
-          e.preventDefault();
-          e.stopImmediatePropagation(); // the game never sees it
-          cmd.value = "";
-        };
-
-        // "load admin"  or  "load" followed by "admin" at the load prompt
-        if (/^load\s+admin$/.test(lower) || (awaitingLoad && lower === "admin")) {
-          swallow();
-          return unlock();
-        }
-
-        awaitingLoad = lower === "load";
-
-        // "admin <command> ..." once unlocked
-        if (unlocked && (lower === "admin" || lower.startsWith("admin "))) {
-          swallow();
-          out(">>> " + line, "fx-dim");
-          runAdmin(line);
-        }
-      },
-      true // capture phase: runs before the game's own handler
-    );
+  // First word of a line as the game would resolve it ("load", "19" ...).
+  function commandOf(lower) {
+    const first = lower.split(/\s+/)[0];
+    try {
+      if (typeof resolveCommand === "function") return resolveCommand(first);
+    } catch (e) { /* fall through */ }
+    return first;
   }
 
-  // If the game's load command uses a browser prompt() box instead of the terminal.
+  const cmd = document.getElementById("command");
+
+  // Listen on document (capture) so we run before ANY handler on the input itself.
+  document.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.target !== cmd || e.key !== "Enter") return;
+      const line = cmd.value.trim();
+      const lower = line.toLowerCase();
+
+      const swallow = () => {
+        e.preventDefault();
+        e.stopImmediatePropagation(); // the game never sees it
+        eatEnter = true;
+        cmd.value = "";
+      };
+
+      // "load admin" typed in one line
+      if (/^load\s+admin$/.test(lower)) {
+        swallow();
+        return unlock();
+      }
+
+      // "admin" typed at the load prompt. Let an EMPTY line through so the game's
+      // load prompt ends instead of waiting forever.
+      if (awaitingLoad && lower === "admin") {
+        unlock();
+        cmd.value = "";
+        return;
+      }
+
+      awaitingLoad = commandOf(lower) === "load" && lower.split(/\s+/).length === 1;
+
+      // "admin <command> ..." once unlocked
+      if (unlocked && (lower === "admin" || lower.startsWith("admin "))) {
+        swallow();
+        out(">>> " + line, "fx-dim");
+        runAdmin(line);
+      }
+    },
+    true
+  );
+
+  ["keypress", "keyup"].forEach((type) =>
+    document.addEventListener(
+      type,
+      (e) => {
+        if (e.target !== cmd || e.key !== "Enter" || !eatEnter) return;
+        e.stopImmediatePropagation();
+        if (type === "keyup") eatEnter = false;
+      },
+      true
+    )
+  );
+
+  // If the load command ever uses a browser prompt() box instead of the terminal.
   const nativePrompt = window.prompt;
   window.prompt = function () {
     const answer = nativePrompt.apply(this, arguments);
